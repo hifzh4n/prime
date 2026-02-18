@@ -53,6 +53,12 @@ export default function Home() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [redeemModalOpen, setRedeemModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   useEffect(() => {
     // Check for success payment
@@ -78,7 +84,7 @@ export default function Home() {
         .catch(err => console.error(err));
 
     } else if (query.get('canceled')) {
-      alert("Payment cancelled.");
+      showToast('Payment was cancelled. You have not been charged.', 'error');
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
@@ -191,6 +197,24 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#050510] text-white selection:bg-pink-500/30 overflow-x-hidden relative">
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-top-4 duration-300 ${toast.type === 'error'
+            ? 'bg-red-950/90 border-red-500/40 text-red-200'
+            : 'bg-zinc-900/90 border-zinc-700/40 text-zinc-200'
+          }`}>
+          {toast.type === 'error' ? (
+            <X className="w-5 h-5 text-red-400 shrink-0" />
+          ) : (
+            <Check className="w-5 h-5 text-green-400 shrink-0" />
+          )}
+          <p className="text-sm font-medium">{toast.message}</p>
+          <button onClick={() => setToast(null)} className="ml-2 text-zinc-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-purple-600/20 blur-[180px]" />
