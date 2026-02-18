@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { rateLimit } from '@/lib/rate-limit';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const stripe = process.env.STRIPE_SECRET_KEY
     ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -28,6 +30,17 @@ export async function POST(req: Request) {
 
         if (!amount) {
             return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+        }
+
+        // Check if email already has a license
+        const licensesRef = collection(db, "licenses");
+        const existingQuery = query(licensesRef, where("email", "==", email));
+        const existingDocs = await getDocs(existingQuery);
+
+        if (!existingDocs.empty) {
+            return NextResponse.json({
+                error: 'This email already has a license. Please use a different email or redeem your existing key.'
+            }, { status: 409 });
         }
 
         // Determine the base URL for success/cancel redirects

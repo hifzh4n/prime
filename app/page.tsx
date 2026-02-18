@@ -91,6 +91,7 @@ export default function Home() {
   const [isCopied, setIsCopied] = useState(false);
   const [redeemStatus, setRedeemStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
 
   const openPurchaseModal = (plan: string) => {
     setSelectedPlan(plan);
@@ -121,7 +122,7 @@ export default function Home() {
       if (response.ok && data.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || 'Checkout failed.');
+        setCheckoutError(data.error || 'Checkout failed.');
         setIsCheckingOut(false);
       }
     } catch (error) {
@@ -431,6 +432,7 @@ export default function Home() {
           // Reset state when modal closes
           setAgreed(false);
           setEmail("");
+          setCheckoutError("");
         }
         setPurchaseModalOpen(open);
       }}>
@@ -448,10 +450,16 @@ export default function Home() {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
-                className="bg-black/50 border-zinc-800 text-white focus:border-purple-500/50 focus:ring-purple-500/20"
+                className={`bg-black/50 border-zinc-800 text-white focus:border-purple-500/50 focus:ring-purple-500/20 ${checkoutError ? 'border-red-500/70' : ''}`}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setCheckoutError(""); }}
               />
+              {checkoutError && (
+                <div className="flex items-start gap-2 mt-1 p-2 rounded-md bg-red-500/10 border border-red-500/30">
+                  <X className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-400">{checkoutError}</p>
+                </div>
+              )}
             </div>
             <div className="flex flex-col space-y-2">
               <div className="flex items-center space-x-2">
