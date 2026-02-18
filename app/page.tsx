@@ -15,9 +15,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Check, Shield, Zap, X, LogIn, Settings, Ban, Code, MousePointerClick, Globe, ArrowUp, Menu, Loader2, Download } from "lucide-react";
+import { Check, Shield, Zap, X, LogIn, Settings, Ban, Code, MousePointerClick, Globe, ArrowUp, Menu, Loader2, Download, Copy, ClipboardCheck } from "lucide-react";
 import { PricingCard } from "@/components/PricingCard";
 import { PolicyModal } from "@/components/PolicyModal";
+import confetti from "canvas-confetti";
 
 // Icons
 const DiscordIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -50,19 +51,53 @@ export default function Home() {
   }, []);
 
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [redeemModalOpen, setRedeemModalOpen] = useState(false);
+
+  useEffect(() => {
+    // Check for success payment
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('success') && query.get('session_id')) {
+      const sessionId = query.get('session_id');
+
+      // verify payment and get key
+      fetch(`/api/verify-payment?session_id=${sessionId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.licenseKey) {
+            setPurchasedKey(data.licenseKey);
+            setSuccessModalOpen(true);
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 }
+            });
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        })
+        .catch(err => console.error(err));
+
+    } else if (query.get('canceled')) {
+      alert("Payment cancelled.");
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+
   const [agreed, setAgreed] = useState(false);
   const [licenseKey, setLicenseKey] = useState("");
+  const [purchasedKey, setPurchasedKey] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
   const [redeemStatus, setRedeemStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const openPurchaseModal = (plan: string) => {
     setSelectedPlan(plan);
     setPurchaseModalOpen(true);
   };
 
-  const handlePurchase = () => {
+  const handlePurchase = async () => {
     if (!agreed || !email) return;
 
     // Email Validation
@@ -72,21 +107,72 @@ export default function Home() {
       return;
     }
 
-    // Mock Stripe redirect
-    alert(`Redirecting to Stripe for ${selectedPlan} plan...\nEmail: ${email}`);
-    setPurchaseModalOpen(false);
+    setIsCheckingOut(true);
+
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: selectedPlan, email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || 'Checkout failed.');
+        setIsCheckingOut(false);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('An error occurred. Please try again.');
+      setIsCheckingOut(false);
+    }
   };
 
-  const handleRedeem = () => {
+  const handleRedeem = async () => {
     if (!licenseKey) return;
     setRedeemStatus('validating');
-    setTimeout(() => {
-      if (licenseKey.trim().length > 5) {
+
+    try {
+      // Determine if input is email or key
+      const isEmail = licenseKey.includes('@');
+      const payload = isEmail ? { email: licenseKey } : { key: licenseKey };
+
+      const response = await fetch('/api/verify-license', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         setRedeemStatus('success');
+        // If user entered email, we might want to show them the key if returned
+        if (data.key) {
+          setPurchasedKey(data.key);
+        }
       } else {
         setRedeemStatus('error');
       }
-    }, 1500);
+    } catch (error) {
+      console.error(error);
+      setRedeemStatus('error');
+    }
+  };
+
+  const handleDownload = () => {
+    window.open('https://github.com/YimMenu/YimMenuV2', '_blank');
+  };
+
+  const handleCopyKey = () => {
+    if (purchasedKey) {
+      navigator.clipboard.writeText(purchasedKey);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }
   };
 
   const scrollToTop = () => {
@@ -154,10 +240,10 @@ export default function Home() {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-black/95 backdrop-blur-xl md:hidden flex flex-col items-center justify-center space-y-8 animate-in fade-in slide-in-from-top-10 duration-200">
-          <Link href="#features" className="text-2xl font-medium text-zinc-300 hover:text-white" onClick={(e) => { scrollToSection(e, "features"); setMobileMenuOpen(false); }}>Features</Link>
-          <Link href="#pricing" className="text-2xl font-medium text-zinc-300 hover:text-white" onClick={(e) => { scrollToSection(e, "pricing"); setMobileMenuOpen(false); }}>Pricing</Link>
-          <Link href="https://discord.gg" target="_blank" className="text-2xl font-medium text-zinc-300 hover:text-white flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+        <div className="fixed inset-0 z-40 bg-black/95 backdrop-blur-xl md:hidden flex flex-col items-center justify-center space-y-8 animate-in fade-in slide-in-from-top-5 duration-300">
+          <Link href="#features" className="text-2xl font-medium text-zinc-300 hover:text-white transition-colors" onClick={(e) => { scrollToSection(e, "features"); setMobileMenuOpen(false); }}>Features</Link>
+          <Link href="#pricing" className="text-2xl font-medium text-zinc-300 hover:text-white transition-colors" onClick={(e) => { scrollToSection(e, "pricing"); setMobileMenuOpen(false); }}>Pricing</Link>
+          <Link href="https://discord.gg" target="_blank" className="text-2xl font-medium text-zinc-300 hover:text-white flex items-center gap-2 transition-colors" onClick={() => setMobileMenuOpen(false)}>
             Discord <DiscordIcon className="w-6 h-6" />
           </Link>
         </div>
@@ -239,7 +325,7 @@ export default function Home() {
             {/* Standard Plan */}
             <PricingCard
               title="Standard"
-              price={25}
+              price={15}
               features={[
                 { name: "All Basic Features", included: true },
                 { name: "Full Protections", included: true },
@@ -263,8 +349,8 @@ export default function Home() {
             {/* Premium Plan */}
             <PricingCard
               title="Premium"
-              price={50}
-              description="Upgrade from Standard for $25"
+              price={20}
+              description="Upgrade from Standard for $5"
               isRecommended={true}
               features={[
                 { name: "All Basic Features", included: true },
@@ -289,7 +375,7 @@ export default function Home() {
             {/* Prime Plan */}
             <PricingCard
               title="Prime"
-              price={80}
+              price={30}
               isExclusive={true}
               features={[
                 { name: "All Basic Features", included: true },
@@ -340,7 +426,14 @@ export default function Home() {
       </Button>
 
       {/* Purchase Modal */}
-      <Dialog open={purchaseModalOpen} onOpenChange={setPurchaseModalOpen}>
+      <Dialog open={purchaseModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Reset state when modal closes
+          setAgreed(false);
+          setEmail("");
+        }
+        setPurchaseModalOpen(open);
+      }}>
         <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Complete Purchase - {selectedPlan}</DialogTitle>
@@ -380,10 +473,16 @@ export default function Home() {
           <div className="flex justify-end pt-4">
             <Button
               onClick={handlePurchase}
-              disabled={!agreed || !email}
+              disabled={!agreed || !email || isCheckingOut}
               className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white border-0"
             >
-              Proceed to Payment
+              {isCheckingOut ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...
+                </>
+              ) : (
+                "Proceed to Payment"
+              )}
             </Button>
           </div>
         </DialogContent>
@@ -394,6 +493,8 @@ export default function Home() {
         if (!open) {
           setRedeemStatus('idle');
           setLicenseKey("");
+          // Clear purchased key so it doesn't persist if they open redeem again later without a purchase
+          if (!successModalOpen) setPurchasedKey("");
         }
         setRedeemModalOpen(open);
       }}>
@@ -401,7 +502,7 @@ export default function Home() {
           <DialogHeader>
             <DialogTitle>Redeem License Key</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Enter your license key to download the loader.
+              Enter your license key OR your email address to verify your purchase.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -412,19 +513,24 @@ export default function Home() {
                 </div>
                 <div className="text-center">
                   <p className="text-lg font-semibold text-white">License Verified!</p>
-                  <p className="text-sm text-zinc-400">You can now download the loader.</p>
+                  {purchasedKey && (
+                    <div className="mt-2 text-sm bg-zinc-900 p-2 rounded text-purple-400 font-mono">
+                      {purchasedKey}
+                    </div>
+                  )}
+                  <p className="text-sm text-zinc-400 mt-2">You can now download the loader.</p>
                 </div>
-                <Button className="w-full mt-2 bg-green-600 hover:bg-green-500 text-white gap-2">
+                <Button onClick={handleDownload} className="w-full mt-2 bg-green-600 hover:bg-green-500 text-white gap-2">
                   <Download className="w-4 h-4" /> Download Loader
                 </Button>
               </div>
             ) : (
               <div className="grid gap-2">
-                <Label htmlFor="key" className="text-zinc-200">License Key</Label>
+                <Label htmlFor="key" className="text-zinc-200">License Key / Email</Label>
                 <Input
                   id="key"
-                  placeholder="XXXX-XXXX-XXXX-XXXX"
-                  className="bg-black/50 border-zinc-800 text-white focus:border-purple-500/50 focus:ring-purple-500/20 font-mono tracking-wider uppercase"
+                  placeholder="Key (XXXX-...) or Email"
+                  className={`bg-black/50 border-zinc-800 text-white focus:border-purple-500/50 focus:ring-purple-500/20 font-mono tracking-wider ${licenseKey.includes('@') ? '' : 'uppercase'}`}
                   value={licenseKey}
                   onChange={(e) => setLicenseKey(e.target.value)}
                   disabled={redeemStatus === 'validating'}
@@ -452,6 +558,49 @@ export default function Home() {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Success Modal */}
+      <Dialog open={successModalOpen} onOpenChange={setSuccessModalOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-center text-green-500 text-2xl">Payment Successful!</DialogTitle>
+            <DialogDescription className="text-center text-zinc-400">
+              Thank you for your purchase.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center gap-6 py-6">
+            <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center animate-in zoom-in duration-500">
+              <Check className="w-10 h-10 text-green-500" />
+            </div>
+            <div className="text-center space-y-2 w-full">
+              <p className="text-white font-medium">Payment Verified!</p>
+              <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-md flex items-center justify-between gap-2 group relative">
+                <code className="font-mono text-purple-400 select-all text-sm break-all">{purchasedKey || "Generating key..."}</code>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-zinc-500 hover:text-white"
+                  onClick={handleCopyKey}
+                  title="Copy to clipboard"
+                >
+                  {isCopied ? <ClipboardCheck className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-sm text-zinc-500">Save this key! It has also been sent to your email.</p>
+            </div>
+            <Button
+              className="w-full bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+              onClick={() => {
+                setSuccessModalOpen(false);
+                setLicenseKey(purchasedKey); // Auto-fill redeem input
+                setRedeemModalOpen(true);
+              }}
+            >
+              Redeem Now
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
