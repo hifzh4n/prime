@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    if (!rateLimit(ip, 5, 60000)) { // 5 requests per minute
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
     try {
         const { key, email } = await req.json();
 

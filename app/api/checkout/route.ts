@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { rateLimit } from '@/lib/rate-limit';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -10,6 +11,10 @@ const PRICES = {
 };
 
 export async function POST(req: Request) {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    if (!rateLimit(ip, 3, 60000)) { // 3 checkouts per minute per IP
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
     try {
         const { plan, email } = await req.json();
 
