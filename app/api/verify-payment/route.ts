@@ -4,7 +4,9 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const stripe = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : null;
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -15,6 +17,9 @@ export async function GET(req: Request) {
     }
 
     try {
+        if (!stripe) {
+            return NextResponse.json({ error: 'Stripe is not configured' }, { status: 500 });
+        }
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
         if (session.payment_status === 'paid') {

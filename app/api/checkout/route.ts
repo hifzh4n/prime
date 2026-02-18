@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { rateLimit } from '@/lib/rate-limit';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const stripe = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : null;
 
 const PRICES = {
     Standard: 1500, // $15.00
@@ -30,6 +32,10 @@ export async function POST(req: Request) {
 
         // Determine the base URL for success/cancel redirects
         const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+        if (!stripe) {
+            return NextResponse.json({ error: 'Stripe is not configured' }, { status: 500 });
+        }
 
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
